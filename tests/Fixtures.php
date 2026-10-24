@@ -54,6 +54,42 @@ final class ReportCommand extends Command
     }
 }
 
+/**
+ * Stands in for zana/logging's LogContext, registered under its service id.
+ */
+final class FakeLogContext
+{
+    /** @var array<string, string|int|float|bool|null> */
+    private array $values = [];
+
+    public function set(string $key, string|int|float|bool|null $value): void
+    {
+        $this->values[$key] = $value;
+    }
+
+    public function remove(string $key): void
+    {
+        unset($this->values[$key]);
+    }
+
+    /**
+     * @return array<string, string|int|float|bool|null>
+     */
+    public function all(): array
+    {
+        return $this->values;
+    }
+}
+
+#[AsCommand(name: 'bmi:trace')]
+final class TraceCommand extends Command
+{
+    public function handle(ScopeMetadata $scope, FakeLogContext $logs, OutputInterface $output): void
+    {
+        $output->writeln(sprintf('scope=%s log=%s', (string) $scope->attribute('correlation_id'), (string) ($logs->all()['correlation_id'] ?? '-')));
+    }
+}
+
 #[AsCommand(name: 'bmi:quiet')]
 final class QuietCommand extends Command
 {

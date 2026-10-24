@@ -12,26 +12,32 @@ use Zana\Console\ConsoleServiceProvider;
 use Zana\Container\Contracts\ServiceCollectionInterface;
 use Zana\Container\ServiceCollection;
 use Zana\Core\Application;
+use Zana\Core\Correlation;
 
 final class ConsoleKernelTest extends TestCase
 {
     private ConsoleKernel $kernel;
 
+    private FakeLogContext $logContext;
+
     protected function setUp(): void
     {
         Journal::$entries = [];
 
-        $this->kernel = Application::configure(sys_get_temp_dir() . '/zana-console-app')
+        $container = Application::configure(sys_get_temp_dir() . '/zana-console-app')
             ->withProviders(ConsoleServiceProvider::class)
             ->withServices(static function (ServiceCollectionInterface $s): void {
-                $s->scoped(UnitOfWork::class);
-                foreach ([ReportCommand::class, QuietCommand::class, FailingCommand::class, BadReturnCommand::class, NoHandleCommand::class, PlainSymfonyCommand::class] as $command) {
+                $s->scoped(UnitOfWork::class)
+                    ->singleton(FakeLogContext::class)
+                    ->alias(Correlation::LOG_CONTEXT, FakeLogContext::class);
+                foreach ([TraceCommand::class, ReportCommand::class, QuietCommand::class, FailingCommand::class, BadReturnCommand::class, NoHandleCommand::class, PlainSymfonyCommand::class] as $command) {
                     $s->singleton($command)->tag(ConsoleKernel::TAG, $command);
                 }
             })
             ->build()
-            ->container()
-            ->get(ConsoleKernel::class);
+            ->container();
+        $this->kernel = $container->get(ConsoleKernel::class);
+        $this->logContext = $container->get(FakeLogContext::class);
     }
 
     public function testHandleReceivesInputOutputStyleAndScopedServices(): void
@@ -42,6 +48,26 @@ final class ConsoleKernelTest extends TestCase
         $this->assertStringContainsString('patient 42, unit ', $output);
         $this->assertStringContainsString('scope cli:bmi:report', $output);
         $this->assertStringContainsString('done', $output);
+    }
+
+    public function testEachRunHasACorrelationId(): void
+    {
+        [, $first] = $this->execute(['command' => 'bmi:trace']);
+        [, $second] = $this->execute(['command' => 'bmi:trace']);
+
+        $this->assertSame(1, preg_match('/^scope=([0-9a-f]{32}) log=([0-9a-f]{32})$/', trim($first), $a), $first);
+        $this->assertSame($a[1] ?? null, $a[2] ?? null, 'the scope and the log context carry the same id');
+        $this->assertStringNotContainsString($a[1] ?? '', $second, 'each run gets its own id');
+        $this->assertSame([], $this->logContext->all(), 'the log context is restored after the run');
+
+        putenv(ConsoleKernel::CORRELATION_ENV . '=cron-2026-10-25');
+        try {
+            $this->assertSame('scope=cron-2026-10-25 log=cron-2026-10-25', trim($this->execute(['command' => 'bmi:trace'])[1]));
+            putenv(ConsoleKernel::CORRELATION_ENV . '=not valid!');
+            $this->assertMatchesRegularExpression('/^scope=[0-9a-f]{32} /', trim($this->execute(['command' => 'bmi:trace'])[1]), 'invalid ids are replaced');
+        } finally {
+            putenv(ConsoleKernel::CORRELATION_ENV);
+        }
     }
 
     public function testEachRunHasItsOwnScopeDisposedAfterwards(): void

@@ -14,7 +14,9 @@ use Zana\Container\Contracts\ContainerInterface;
 use Zana\Core\ApplicationInterface;
 
 /**
- * Runs console commands, each in its own container scope.
+ * Runs console commands, each in its own container scope with a correlation
+ * id (scope attribute "correlation_id", and zana/logging's LogContext when
+ * installed).
  *
  * Commands come from the "console.commands" tag (resolved from the root
  * container) and from add().
@@ -22,6 +24,9 @@ use Zana\Core\ApplicationInterface;
 final class ConsoleKernel
 {
     public const TAG = 'console.commands';
+
+    /** Environment variable whose valid value is reused as the correlation id. */
+    public const CORRELATION_ENV = 'ZANA_CORRELATION_ID';
 
     /** @var list<SymfonyCommand> */
     private array $extra = [];
