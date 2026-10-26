@@ -15,8 +15,10 @@ use Zana\Core\Deployment\DeploymentChecks;
 /**
  * Checks the server before going live (FE-18): the PHP version and the
  * extensions the application needs (app.extensions), a writable var/
- * directory, the length of security.secret, and every deployment check the
- * application runs at startup. Exits with 1 when something is fatal.
+ * directory, the length of security.secret, every deployment check the
+ * application runs at startup, and that every singleton can be created: a
+ * factory that resolves a scoped service, which the build cannot see, fails
+ * here rather than in traffic (FE-40). Exits with 1 when something is fatal.
  */
 #[AsCommand(name: 'doctor', description: 'Check that this server is ready to run the application')]
 final class DoctorCommand extends Command
@@ -55,6 +57,8 @@ final class DoctorCommand extends Command
             }
         }
 
+        array_push($results, ...self::singletons($application));
+
         $fatal = false;
         foreach ($results as [$status, $message]) {
             match ($status) {
@@ -69,5 +73,34 @@ final class DoctorCommand extends Command
         $fatal ? $io->error('This server is not ready.') : $io->success('This server is ready.');
 
         return $fatal ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * Create every singleton once, from the root container, as the first request would.
+     *
+     * @return list<array{CheckStatus, string}>
+     */
+    private static function singletons(ApplicationInterface $application): array
+    {
+        $container = $application->container();
+        $results = [];
+        $created = 0;
+        $seen = [];
+        foreach ($container->graph()->nodes() as $node) {
+            $id = $node->service . "\0" . $node->key;
+            if ($node->lifetime !== 'singleton' || $node->strategy === 'instance' || isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
+            try {
+                $node->key === null ? $container->get($node->service) : $container->getKeyed($node->service, $node->key);
+                $created++;
+            } catch (\Throwable $e) {
+                $label = $node->service . ($node->key === null ? '' : " [key: {$node->key}]");
+                $results[] = [CheckStatus::Fatal, "The singleton {$label} cannot be created: " . strtok($e->getMessage(), "\n")];
+            }
+        }
+
+        return $results === [] ? [[CheckStatus::Ok, "All {$created} singletons can be created"]] : $results;
     }
 }

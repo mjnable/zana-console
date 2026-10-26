@@ -29,7 +29,7 @@ final class ConsoleServiceProvider extends ServiceProvider
             assert($root instanceof ContainerInterface);
 
             return new ConsoleKernel($root, $root->get(ConfigurationInterface::class)->string('app.name', 'Zana'));
-        });
+        })->uses(ConfigurationInterface::class);
 
         foreach (self::COMMANDS as $command) {
             $services->singleton($command)->tag(ConsoleKernel::TAG, $command);

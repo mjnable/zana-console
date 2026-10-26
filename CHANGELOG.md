@@ -9,6 +9,8 @@ not change this package is not listed.
 
 - `cache:clear` deletes the configuration cache and `cache:warm` writes it, failing with the key
   that cannot be cached (ADR-019). `about` and `doctor` report it.
+- `doctor` creates every singleton once and reports the ones that cannot be created, such as a
+  factory resolving a scoped service (FE-40).
 - Requires `mj-zana/core` ^2.4.
 
 ## 2.3.0 — 2026-10-26

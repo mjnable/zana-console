@@ -87,18 +87,32 @@ final class DeploymentCommandsTest extends TestCase
         $this->assertStringContainsString('This server is not ready.', $output);
     }
 
+    public function testDoctorFindsASingletonThatCannotBeCreated(): void
+    {
+        // A factory the build cannot see into: it resolves a scoped service (FE-40)
+        $kernel = $this->kernel(['security.secret' => str_repeat('s', 32)], static fn (ServiceCollectionInterface $s) => $s
+            ->scoped('editors', static fn (): \stdClass => new \stdClass())
+            ->singleton('reset.tokens', static fn ($r): object => $r->get('editors')));
+
+        [$code, $output] = $this->execute($kernel, 'doctor');
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('✘ The singleton reset.tokens cannot be created: Singleton reset.tokens (singleton, app) resolves scoped service editors (scoped, app) in its factory', $output);
+    }
+
     public function testDoctorPassesOnAHealthyServer(): void
     {
         [$code, $output] = $this->execute($this->kernel(['security.secret' => str_repeat('s', 32)]), 'doctor');
 
         $this->assertSame(0, $code, $output);
+        $this->assertMatchesRegularExpression('/✔ All \d+ singletons can be created/', $output);
         $this->assertStringContainsString('This server is ready.', $output);
     }
 
     /**
      * @param array<string, mixed> $config
      */
-    private function kernel(array $config = []): ConsoleKernel
+    private function kernel(array $config = [], ?\Closure $services = null): ConsoleKernel
     {
         $kernel = Application::configure($this->base)
             ->withEnvironment('development')
@@ -108,6 +122,7 @@ final class DeploymentCommandsTest extends TestCase
                 ->singleton(TemplateCache::class)
                 ->tag(CacheClearerInterface::CLEARER_TAG, TemplateCache::class)
                 ->tag(CacheWarmerInterface::WARMER_TAG, TemplateCache::class))
+            ->withServices($services ?? static fn (): null => null)
             ->withContainerCache("{$this->base}/var/container.php")
             ->withConfigurationCache("{$this->base}/var/config.php")
             ->build()
