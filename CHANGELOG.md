@@ -3,6 +3,16 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.2.0 — unreleased
+
+### Added
+
+- `cache:clear`, `cache:warm`, `about` and `doctor` (FE-18).
+
+### Changed
+
+- Requires `mj-zana/core` ^2.2.
+
 ## 2.0.0 — 2026-10-26
 
 The final 2.0 release. No changes since 2.0.0-rc.1.
