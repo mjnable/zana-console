@@ -12,8 +12,8 @@ use Zana\Core\ApplicationInterface;
 use Zana\Core\Cache\CacheClearerInterface;
 
 /**
- * Deletes the compiled container and runs the cache clearers (compiled
- * templates, ...). Run it after each deployment.
+ * Deletes the compiled container, the configuration cache, and runs the
+ * cache clearers (compiled templates, ...). Run it after each deployment.
  */
 #[AsCommand(name: 'cache:clear', description: 'Delete the compiled container and the other caches')]
 final class CacheClearCommand extends Command
@@ -26,6 +26,12 @@ final class CacheClearCommand extends Command
         if ($file !== null && is_file($file)) {
             unlink($file);
             $cleared[] = "compiled container ({$file})";
+        }
+
+        $file = $application instanceof Application ? $application->configurationCache() : null;
+        if ($file !== null && is_file($file)) {
+            unlink($file);
+            $cleared[] = "configuration cache ({$file})";
         }
 
         foreach ($application->container()->tagged(CacheClearerInterface::CLEARER_TAG) as $clearer) {

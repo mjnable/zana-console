@@ -48,7 +48,8 @@ final class DoctorCommand extends Command
                 : [CheckStatus::Fatal, 'security.secret must be at least 32 bytes.'];
         }
 
-        foreach (DeploymentChecks::run($application, $application instanceof Application ? $application->containerCache() : null) as [$check, $result]) {
+        $caches = $application instanceof Application ? [$application->containerCache(), $application->environment()->isProduction() ? $application->configurationCache() : null] : [null, null];
+        foreach (DeploymentChecks::run($application, ...$caches) as [$check, $result]) {
             foreach ($result->status === CheckStatus::Ok ? ['Deployment checks: ' . substr((string) strrchr('\\' . $check, '\\'), 1)] : explode("\n", $result->message) as $message) {
                 $results[] = [$result->status, $message];
             }

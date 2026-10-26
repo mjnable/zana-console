@@ -29,27 +29,40 @@ final class DeploymentCommandsTest extends TestCase
     #[After]
     public function cleanUp(): void
     {
-        @unlink("{$this->base}/var/container.php");
-        @rmdir("{$this->base}/var");
-        @rmdir($this->base);
+        exec(PHP_OS_FAMILY === 'Windows' ? 'rmdir /s /q ' . escapeshellarg(str_replace('/', '\\', $this->base)) : 'rm -rf ' . escapeshellarg($this->base));
     }
 
     public function testCacheWarmCompilesAndCacheClearDeletes(): void
     {
         $kernel = $this->kernel();
         $file = "{$this->base}/var/container.php";
+        $config = "{$this->base}/var/config.php";
         unlink($file);
 
         [$code, $output] = $this->execute($kernel, 'cache:warm');
         $this->assertSame(0, $code);
         $this->assertFileExists($file);
+        $this->assertFileExists($config);
         $this->assertStringContainsString('compiled container', $output);
+        $this->assertStringContainsString('configuration cache', $output);
         $this->assertStringContainsString('templates warmed', $output);
 
         [$code, $output] = $this->execute($kernel, 'cache:clear');
         $this->assertSame(0, $code);
         $this->assertFileDoesNotExist($file);
+        $this->assertFileDoesNotExist($config);
         $this->assertStringContainsString('templates cleared', $output);
+    }
+
+    public function testCacheWarmExplainsAConfigurationThatCannotBeCached(): void
+    {
+        mkdir("{$this->base}/config");
+        file_put_contents("{$this->base}/config/clock.php", '<?php return ["zone" => new DateTimeZone("UTC")];');
+
+        [$code, $output] = $this->execute($this->kernel(), 'cache:warm');
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('clock.zone is DateTimeZone', $output);
     }
 
     public function testAboutShowsTheApplication(): void
@@ -60,6 +73,7 @@ final class DeploymentCommandsTest extends TestCase
         $this->assertStringContainsString('Acme', $output);
         $this->assertStringContainsString('development', $output);
         $this->assertStringContainsString('mj-zana/console', $output);
+        $this->assertStringContainsString('(used in production only)', $output);
     }
 
     public function testDoctorReportsProblems(): void
@@ -95,6 +109,7 @@ final class DeploymentCommandsTest extends TestCase
                 ->tag(CacheClearerInterface::CLEARER_TAG, TemplateCache::class)
                 ->tag(CacheWarmerInterface::WARMER_TAG, TemplateCache::class))
             ->withContainerCache("{$this->base}/var/container.php")
+            ->withConfigurationCache("{$this->base}/var/config.php")
             ->build()
             ->container()
             ->get(ConsoleKernel::class);

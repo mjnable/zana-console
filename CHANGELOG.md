@@ -3,6 +3,14 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.4.0 — unreleased
+
+### Changed
+
+- `cache:clear` deletes the configuration cache and `cache:warm` writes it, failing with the key
+  that cannot be cached (ADR-019). `about` and `doctor` report it.
+- Requires `mj-zana/core` ^2.4.
+
 ## 2.3.0 — 2026-10-26
 
 ### Changed

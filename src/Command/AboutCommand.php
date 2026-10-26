@@ -23,6 +23,7 @@ final class AboutCommand extends Command
         $environment = $application->environment();
         $config = $application->config();
         $cache = $application instanceof Application ? $application->containerCache() : null;
+        $configCache = $application instanceof Application ? $application->configurationCache() : null;
 
         $io->title($config->string('app.name', 'Zana application'));
         $io->definitionList(
@@ -32,6 +33,7 @@ final class AboutCommand extends Command
             ['PHP' => PHP_VERSION . ' (' . PHP_SAPI . ')'],
             ['Base path' => $application->basePath()],
             ['Container cache' => $cache === null ? 'none' : ($cache . (is_file($cache) ? '' : ' (not compiled)'))],
+            ['Configuration cache' => $configCache === null ? 'none' : ($configCache . (is_file($configCache) ? '' : ' (not written)') . ($environment->isProduction() ? '' : ' (used in production only)'))],
             ['Modules' => implode(', ', array_map(static fn ($module): string => $module->name(), $application->modules())) ?: 'none'],
         );
 

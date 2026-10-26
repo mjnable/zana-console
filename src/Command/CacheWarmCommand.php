@@ -8,6 +8,7 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Zana\Console\Command;
 use Zana\Core\Application;
+use Zana\Core\ApplicationException;
 use Zana\Core\ApplicationInterface;
 use Zana\Core\Cache\CacheWarmerInterface;
 
@@ -25,6 +26,17 @@ final class CacheWarmCommand extends Command
         $file = $application instanceof Application ? $application->compileContainerCache() : null;
         if ($file !== null) {
             $warmed[] = "compiled container ({$file})";
+        }
+
+        try {
+            $file = $application instanceof Application ? $application->compileConfigurationCache() : null;
+        } catch (ApplicationException $e) {
+            $io->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+        if ($file !== null) {
+            $warmed[] = "configuration cache ({$file}, " . $application->environment()->name . ')';
         }
 
         foreach ($application->container()->tagged(CacheWarmerInterface::WARMER_TAG) as $warmer) {
