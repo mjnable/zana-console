@@ -3,6 +3,19 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.5.0 — unreleased
+
+### Added
+
+- `release:build`, moved from the website skeleton (ADR-021): the upload archives for shared hosting,
+  built from a commit. Fixed on Windows (FE-41):
+  - git and Composer write to a file instead of pipes, so a command writing more than a pipe holds no
+    longer blocks for ever;
+  - Composer is found on the `PATH`, including the `composer.phar` beside `composer.bat`, and a `.bat`
+    runs through `cmd /c`;
+  - `-v` shows the output as it comes, and `--timeout` (600 seconds) stops the build, showing the end
+    of the output.
+- `ext-zip` is suggested, for `release:build`.
 ## 2.4.0 — 2026-10-26
 
 ### Changed

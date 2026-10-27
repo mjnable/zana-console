@@ -45,6 +45,15 @@ $services->transient(BmiReportCommand::class)->tag(ConsoleKernel::TAG, BmiReport
   current input, output and a `SymfonyStyle`, by type.
 - **Plain Symfony commands** work too.
 
+## Deployment commands
+
+| Command | |
+|---|---|
+| `cache:clear`, `cache:warm` | The compiled container, the configuration cache, and tagged caches |
+| `about` | The application, its environment and its Zana packages |
+| `doctor` | Checks the server before going live, singletons included |
+| `release:build` | Upload archives for shared hosting, from a commit (2.5). `-v` shows git and Composer, `--timeout` stops a stuck build |
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
