@@ -3,6 +3,25 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.7.0 — 2026-10-31
+
+### Added
+
+- `inspect [section] [--format=json]`: the environment, modules, services with their lifetimes and
+  origins, console commands, configuration keys with their types (never their values), packages, and
+  the sections packages add (FE-45).
+- `check [--format=json]`: the container builds, the deployment checks, every singleton can be
+  created, the architecture rules of `mj-zana/testing` on `modules/`, and the checks packages add.
+  Problems are findings with an id, a severity, a file and a hint; exit code 1 on an error (FE-46).
+- `doctor --format=json`, with the same report as `check`.
+- `ConsoleKernel::runBuilder()`: builds the application and runs the console, so that `check`
+  reports a container that does not build.
+
+### Changed
+
+- `doctor` lists its problems as findings, the same way as `check`.
+- Requires `mj-zana/core` ^2.7.
+
 ## 2.5.0 — 2026-10-27
 
 ### Added

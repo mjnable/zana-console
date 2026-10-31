@@ -8,7 +8,9 @@ use Zana\Configuration\ConfigurationInterface;
 use Zana\Console\Command\AboutCommand;
 use Zana\Console\Command\CacheClearCommand;
 use Zana\Console\Command\CacheWarmCommand;
+use Zana\Console\Command\CheckCommand;
 use Zana\Console\Command\DoctorCommand;
+use Zana\Console\Command\InspectCommand;
 use Zana\Console\Command\ReleaseBuildCommand;
 use Zana\Container\Contracts\ContainerInterface;
 use Zana\Container\Contracts\ServiceCollectionInterface;
@@ -17,12 +19,12 @@ use Zana\Core\ServiceProvider;
 
 /**
  * Registers the console kernel and the built-in commands: cache:clear,
- * cache:warm, about, doctor and release:build. Commands are services tagged
+ * cache:warm, about, doctor, release:build, inspect and check. Commands are services tagged
  * "console.commands". The application name comes from app.name.
  */
 final class ConsoleServiceProvider extends ServiceProvider
 {
-    private const array COMMANDS = [CacheClearCommand::class, CacheWarmCommand::class, AboutCommand::class, DoctorCommand::class, ReleaseBuildCommand::class];
+    private const array COMMANDS = [CacheClearCommand::class, CacheWarmCommand::class, AboutCommand::class, DoctorCommand::class, ReleaseBuildCommand::class, InspectCommand::class, CheckCommand::class];
 
     public function register(ServiceCollectionInterface $services): void
     {
