@@ -13,6 +13,9 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use Zana\Console\Command;
 use Zana\Container\Contracts\Disposable;
 use Zana\Container\ScopeMetadata;
+use Zana\Validation\ValidationException;
+use Zana\Validation\Violation;
+use Zana\Validation\ViolationList;
 
 final class Journal
 {
@@ -105,6 +108,18 @@ final class FailingCommand extends Command
     public function handle(): int
     {
         throw new \RuntimeException('database unreachable');
+    }
+}
+
+#[AsCommand(name: 'bmi:invalid')]
+final class InvalidInputCommand extends Command
+{
+    public function handle(): int
+    {
+        throw new ValidationException(new ViolationList([
+            new Violation('height', 'Must be positive.', 'Positive'),
+            new Violation('weight', 'Required.', 'NotNull'),
+        ]));
     }
 }
 

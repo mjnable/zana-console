@@ -30,7 +30,7 @@ final class ConsoleKernelTest extends TestCase
                 $s->scoped(UnitOfWork::class)
                     ->singleton(FakeLogContext::class)
                     ->alias(Correlation::LOG_CONTEXT, FakeLogContext::class);
-                foreach ([TraceCommand::class, ReportCommand::class, QuietCommand::class, FailingCommand::class, BadReturnCommand::class, NoHandleCommand::class, PlainSymfonyCommand::class] as $command) {
+                foreach ([TraceCommand::class, ReportCommand::class, QuietCommand::class, FailingCommand::class, InvalidInputCommand::class, BadReturnCommand::class, NoHandleCommand::class, PlainSymfonyCommand::class] as $command) {
                     $s->singleton($command)->tag(ConsoleKernel::TAG, $command);
                 }
             })
@@ -94,6 +94,17 @@ final class ConsoleKernelTest extends TestCase
 
         $this->assertSame(1, $code);
         $this->assertStringContainsString('database unreachable', $output);
+    }
+
+    public function testValidationFailuresShowTheirFieldErrors(): void
+    {
+        [$code, $output] = $this->execute(['command' => 'bmi:invalid']);
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('The input is not valid:', $output);
+        $this->assertStringContainsString('height: Must be positive.', $output);
+        $this->assertStringContainsString('weight: Required.', $output);
+        $this->assertStringNotContainsString('ValidationException', $output, 'no exception output');
     }
 
     public function testInvalidHandlersAreReported(): void

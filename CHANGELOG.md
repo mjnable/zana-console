@@ -3,6 +3,13 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.10.0 — 2026-11-01
+
+### Changed
+
+- A `ValidationException` (mj-zana/validation) is printed as its field errors, one per line
+  (ADR-025).
+
 ## 2.7.0 — 2026-10-31
 
 ### Added
