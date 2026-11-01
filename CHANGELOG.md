@@ -3,6 +3,14 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.11.0 — 2026-11-01
+
+### Changed
+
+- `ConsoleKernel::runBuilder()` and `runApplication()` record the script of the real command line in
+  `ConsoleScript`, relative to the application (FE-54).
+- Requires `mj-zana/core` ^2.11.
+
 ## 2.10.0 — 2026-11-01
 
 ### Changed

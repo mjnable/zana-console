@@ -17,6 +17,7 @@ use Zana\Container\Contracts\ContainerInterface;
 use Zana\Container\Exception\ContainerBuildException;
 use Zana\Core\ApplicationBuilder;
 use Zana\Core\ApplicationInterface;
+use Zana\Core\ConsoleScript;
 use Zana\Core\Inspection\Finding;
 use Zana\Core\Inspection\Severity;
 
@@ -58,6 +59,9 @@ final class ConsoleKernel
      */
     public static function runBuilder(ApplicationBuilder $builder, ?InputInterface $input = null, ?OutputInterface $output = null): int
     {
+        if ($input === null) {
+            self::recordScript($builder->basePath());
+        }
         $input ??= new ArgvInput();
         try {
             $application = $builder->build();
@@ -92,6 +96,9 @@ final class ConsoleKernel
      */
     public static function runApplication(ApplicationInterface $application, ?InputInterface $input = null, ?OutputInterface $output = null): int
     {
+        if ($input === null) {
+            self::recordScript($application->basePath());
+        }
         try {
             $kernel = $application->container()->get(self::class);
             assert($kernel instanceof self);
@@ -100,6 +107,16 @@ final class ConsoleKernel
         } finally {
             $application->terminate();
         }
+    }
+
+    /**
+     * Remember the script of the real command line (e.g. bin/zana), so hints can name it (FE-54).
+     */
+    private static function recordScript(string $basePath): void
+    {
+        $argv = $_SERVER['argv'] ?? null;
+        $script = is_array($argv) && is_string($argv[0] ?? null) ? $argv[0] : null;
+        ConsoleScript::record($script !== null && is_file($script) ? $script : null, $basePath);
     }
 
     public function add(SymfonyCommand ...$commands): self
