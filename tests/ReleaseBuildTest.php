@@ -95,33 +95,16 @@ final class ReleaseBuildTest extends TestCase
     #[RequiresPhpExtension('zip')]
     public function testTheArchivesSplitTheProjectFromItsPublicFolder(): void
     {
-        $this->project = $this->temporaryDirectory();
-        $files = [
-            'composer.json' => '{"name": "acme/site", "require": {}}',
-            'public/index.php' => "<?php\nconst PROJECT_FOLDER = 'website';\n",
-            'public/assets/site.css' => 'body {}',
-            'src/Page.php' => '<?php',
-            'tests/PageTest.php' => '<?php',
-            'phpunit.xml.dist' => '<phpunit/>',
-            '.gitignore' => "/vendor/\n/var/\n.env\n",
-        ];
-        foreach ($files as $name => $content) {
-            @mkdir(dirname("{$this->project}/{$name}"), 0775, true);
-            file_put_contents("{$this->project}/{$name}", $content);
-        }
+        $this->commitProject();
         file_put_contents("{$this->project}/.env", 'APP_SECURITY__SECRET=never-shipped');
         file_put_contents("{$this->project}/uncommitted.txt", 'not in the commit');
-        $git = 'git -C ' . escapeshellarg($this->project);
-        exec("{$git} init -q 2>&1 && {$git} add composer.json public src tests phpunit.xml.dist .gitignore 2>&1 && {$git} -c user.name=Test -c user.email=test@example.com commit -q -m init 2>&1", $out, $status);
-        if ($status !== 0) {
-            $this->markTestSkipped('git is not available.');
-        }
 
         $composer = ComposerLocator::fromEnvironment()->locate();
         $archives = (new ReleaseBuilder($this->project, $composer, new Process(300)))->build("{$this->project}/build", 'acme-site');
 
         $code = self::entries($archives['code']);
         $this->assertContains('acme-site/src/Page.php', $code);
+        $this->assertContains('acme-site/public/index.php', $code, 'the only upload unless the layout is split');
         $this->assertContains('acme-site/vendor/autoload.php', $code, 'production dependencies are installed');
         $this->assertContains('acme-site/var/', $code);
         $this->assertNotContains('acme-site/tests/PageTest.php', $code);
@@ -137,11 +120,93 @@ final class ReleaseBuildTest extends TestCase
         $zip->close();
     }
 
+    #[RequiresPhpExtension('zip')]
+    public function testProjectDocumentsStayInTheRepository(): void
+    {
+        $documents = ['AGENTS.md', 'CLAUDE.md', 'README.md', '.env.example'];
+        $this->commitProject(array_fill_keys($documents, 'for people and agents') + ['src/Blog/README.md' => 'part of a module']);
+
+        $code = self::entries($this->build()['code']);
+
+        foreach ($documents as $document) {
+            $this->assertNotContains("website/{$document}", $code);
+            $this->assertFileExists("{$this->project}/{$document}");
+        }
+        $this->assertContains('website/src/Blog/README.md', $code, 'only top-level names are left out');
+    }
+
+    #[RequiresPhpExtension('zip')]
+    public function testTheCodeArchiveCanLeaveThePublicFolderToTheOtherArchive(): void
+    {
+        $this->commitProject();
+
+        $archives = $this->build(includePublic: false);
+
+        $this->assertSame([], preg_grep('#^website/public(/|$)#', self::entries($archives['code'])));
+        $this->assertContains('website/src/Page.php', self::entries($archives['code']));
+
+        $public = self::entries($archives['public']);
+        sort($public);
+        $this->assertSame(['assets/site.css', 'index.php'], $public, 'public_html.zip is unchanged');
+    }
+
+    #[RequiresPhpExtension('zip')]
+    public function testExportIgnoreLeavesAPathOutOfBothArchives(): void
+    {
+        $this->commitProject([
+            'docs/security.md' => 'project notes',
+            'public/drafts/page.html' => 'not ready',
+            '.gitattributes' => "/docs export-ignore\n/public/drafts export-ignore\n",
+        ]);
+
+        $archives = $this->build();
+
+        $this->assertSame([], preg_grep('#/(docs|drafts)/#', self::entries($archives['code'])));
+        $this->assertSame([], preg_grep('#^drafts/#', self::entries($archives['public'])));
+    }
+
     public function testFolderNamesCannotEscape(): void
     {
         $this->expectException(ReleaseException::class);
 
         (new ReleaseBuilder(__DIR__, ['composer']))->build(sys_get_temp_dir(), '../elsewhere');
+    }
+
+    /**
+     * @param array<string, string> $extra Files beside the usual ones
+     */
+    private function commitProject(array $extra = []): void
+    {
+        $this->project = $this->temporaryDirectory();
+        $files = $extra + [
+            'composer.json' => '{"name": "acme/site", "require": {}}',
+            'public/index.php' => "<?php\nconst PROJECT_FOLDER = 'website';\n",
+            'public/assets/site.css' => 'body {}',
+            'src/Page.php' => '<?php',
+            'tests/PageTest.php' => '<?php',
+            'phpunit.xml.dist' => '<phpunit/>',
+            '.gitignore' => "/vendor/\n/var/\n/build/\n.env\n",
+        ];
+        foreach ($files as $name => $content) {
+            @mkdir(dirname("{$this->project}/{$name}"), 0775, true);
+            file_put_contents("{$this->project}/{$name}", $content);
+        }
+        $git = 'git -C ' . escapeshellarg($this->project);
+        $paths = implode(' ', array_map(escapeshellarg(...), array_keys($files)));
+        exec("{$git} init -q 2>&1 && {$git} add {$paths} 2>&1 && {$git} -c user.name=Test -c user.email=test@example.com commit -q -m init 2>&1", $out, $status);
+        if ($status !== 0) {
+            $this->markTestSkipped('git is not available.');
+        }
+    }
+
+    /**
+     * @return array{code: string, public: string}
+     */
+    private function build(bool $includePublic = true): array
+    {
+        $composer = ComposerLocator::fromEnvironment()->locate();
+
+        return (new ReleaseBuilder($this->project, $composer, new Process(300)))->build("{$this->project}/build", includePublic: $includePublic);
     }
 
     private function temporaryDirectory(): string

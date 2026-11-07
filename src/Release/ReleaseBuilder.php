@@ -15,12 +15,17 @@ namespace Zana\Console\Release;
  *   constant of the website skeleton's front controller).
  *
  * The archives come from a commit (git archive), so uncommitted files,
- * .env and var/ never ship. Tests and development tooling are left out.
+ * .env and var/ never ship, and export-ignore in the project's
+ * .gitattributes leaves a path out of both. Tests, development tooling and
+ * the project's documents are left out.
  */
 final readonly class ReleaseBuilder
 {
     /** Top-level paths of the project that never ship. */
-    private const array EXCLUDED = ['tests', '.github', 'phpunit.xml.dist', 'phpunit.xml', '.gitattributes', '.gitignore', '.env', '.env.testing'];
+    private const array EXCLUDED = [
+        'tests', '.github', 'phpunit.xml.dist', 'phpunit.xml', '.gitattributes', '.gitignore', '.env', '.env.testing',
+        'AGENTS.md', 'CLAUDE.md', 'README.md', '.env.example',
+    ];
 
     /**
      * @param list<string> $composer The command that runs Composer (see ComposerLocator)
@@ -30,11 +35,14 @@ final readonly class ReleaseBuilder
     }
 
     /**
+     * @param bool $includePublic Keep public/ in the code archive too. Only the split layout can do
+     *                           without it: elsewhere the code archive is the only upload.
+     *
      * @return array{code: string, public: string} The two archives
      *
      * @throws ReleaseException When git or Composer fails, or the project has no public/index.php
      */
-    public function build(string $output, string $folder = 'website', string $ref = 'HEAD'): array
+    public function build(string $output, string $folder = 'website', string $ref = 'HEAD', bool $includePublic = true): array
     {
         if (!class_exists(\ZipArchive::class)) {
             throw new ReleaseException('release:build needs the zip extension (ext-zip).');
@@ -71,7 +79,7 @@ final readonly class ReleaseBuilder
                 throw new ReleaseException("The folder {$output} cannot be created.");
             }
             $archives = ['code' => "{$output}/{$folder}.zip", 'public' => "{$output}/public_html.zip"];
-            self::zip($archives['code'], $source, "{$folder}/", self::EXCLUDED, ["{$folder}/var/"]);
+            self::zip($archives['code'], $source, "{$folder}/", $includePublic ? self::EXCLUDED : [...self::EXCLUDED, 'public'], ["{$folder}/var/"]);
             self::zip($archives['public'], "{$source}/public", '', [], []);
 
             return $archives;

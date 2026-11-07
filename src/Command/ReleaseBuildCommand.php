@@ -17,7 +17,7 @@ use Zana\Console\Release\ReleaseException;
 use Zana\Core\ApplicationInterface;
 
 /**
- * php bin/console release:build [--folder=website] [--ref=HEAD] [-v]
+ * php bin/console release:build [--folder=website] [--ref=HEAD] [--no-public] [-v]
  *
  * Writes build/<folder>.zip and build/public_html.zip from a commit, with the
  * production dependencies installed, for shared hosting without Composer
@@ -31,6 +31,7 @@ final class ReleaseBuildCommand extends Command
         $this
             ->addOption('folder', null, InputOption::VALUE_REQUIRED, 'The folder that holds the project on the server, beside public_html', 'website')
             ->addOption('ref', null, InputOption::VALUE_REQUIRED, 'The commit, branch or tag to build', 'HEAD')
+            ->addOption('no-public', null, InputOption::VALUE_NONE, 'Leave public/ out of the code archive, when public_html.zip is the only copy that is served')
             ->addOption('output', null, InputOption::VALUE_REQUIRED, 'Where to write the archives', 'build')
             ->addOption('composer', null, InputOption::VALUE_REQUIRED, 'The Composer command, or the path of composer.phar (default: found on the PATH)')
             ->addOption('timeout', null, InputOption::VALUE_REQUIRED, 'Seconds before git or Composer is stopped', '600');
@@ -51,7 +52,7 @@ final class ReleaseBuildCommand extends Command
 
         try {
             $archives = (new ReleaseBuilder($application->path(), $composer, new Process($timeout, $echo)))
-                ->build($target, $folder, (string) $input->getOption('ref'));
+                ->build($target, $folder, (string) $input->getOption('ref'), !$input->getOption('no-public'));
         } catch (ReleaseException $e) {
             $io->error($e->getMessage());
 

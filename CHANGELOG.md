@@ -3,6 +3,18 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.18.0 — Unreleased
+
+### Added
+
+- `release:build --no-public` leaves `public/` out of the code archive, for the split layout, where
+  `public_html.zip` is the only copy that is served (FE-65).
+
+### Changed
+
+- `release:build` leaves `AGENTS.md`, `CLAUDE.md`, `README.md` and `.env.example` out of the code archive
+  (FE-65).
+
 ## 2.11.0 — 2026-11-01
 
 ### Changed
