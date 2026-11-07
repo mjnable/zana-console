@@ -69,6 +69,42 @@ final class ReleaseCleanTest extends TestCase
         $this->assertSame(['*.log'], $unsupported);
     }
 
+    public function testOtherSpellingsOfAFileAreNotPlainPaths(): void
+    {
+        // On Windows, the first two open .env; the rest name devices, streams or expansions.
+        $hostile = ['/.env..', '/ENV~1', '/VENDOR~1', '/var.', '/vendor.', '/.git.', '/public.', '/.env::$DATA', '/.env:stream', '/...', '/....', '/CON', '/nul.txt', '/LPT1', '/~/x', '/$HOME', '/bin/%2e%2e/.env'];
+
+        ['paths' => $paths, 'unsupported' => $unsupported] = ExclusionRules::live(implode("\n", array_map(static fn (string $line): string => "{$line} export-ignore", $hostile)));
+
+        $this->assertSame(array_values(array_diff(ExclusionRules::PATHS, ['.env'])), $paths);
+        $this->assertSame($hostile, $unsupported, 'each is named, not dropped in silence');
+    }
+
+    public function testADeletionDoesNotGoThroughALink(): void
+    {
+        $this->folder();
+        mkdir("{$this->root}/outside");
+        file_put_contents("{$this->root}/outside/secret.txt", 'not part of the project');
+        $this->link("{$this->root}/outside", "{$this->project()}/link");
+        file_put_contents("{$this->project()}/.gitattributes", "/link/secret.txt export-ignore\n");
+
+        [$code, $output] = $this->run_('production', ['--force' => true]);
+
+        $this->assertSame(1, $code, 'it says so');
+        $this->assertStringContainsString('link/secret.txt', $output);
+        $this->assertFileExists("{$this->root}/outside/secret.txt");
+    }
+
+    public function testADeletionMatchesTheNameOnTheDisk(): void
+    {
+        $this->folder();
+        $cleaner = new LiveCleaner($this->project());
+
+        $cleaner->clean(['.env..', '.env.', '.env ', 'ENV~1']);   // as if the first check had let them through
+
+        $this->assertFileExists("{$this->project()}/.env");
+    }
+
     public function testGitAttributesCannotReachOutsideTheProjectOrAProtectedPath(): void
     {
         $hostile = ['/.. ', '/../other ', '/src/../.. ', '/.env ', '/.ENV ', '/.git ', '/.git/config ', '/var ', '/var/log ', '/vendor ', '/public ', '/ ', 'C:/Windows ', '/a\\b '];

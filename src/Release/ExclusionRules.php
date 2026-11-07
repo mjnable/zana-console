@@ -75,15 +75,20 @@ final class ExclusionRules
 
     /**
      * Whether a path from .gitattributes, which is the application's input, is
-     * a plain path inside the project.
+     * a plain path inside the project. This allows what is known to be plain
+     * rather than refusing what is known to be dangerous, because the file
+     * system has more spellings than anyone lists: on Windows, ".env.." and
+     * "ENV~1" both open .env. A file with another name goes in the report as
+     * not applied. LiveCleaner checks the disk as well, before it deletes.
      */
     private static function isLiteral(string $path): bool
     {
-        if ($path === '' || preg_match('/[*?\[\]\\\\!"]/', $path) === 1 || preg_match('/^[A-Za-z]:/', $path) === 1) {
+        if ($path === '') {
             return false;
         }
         foreach (explode('/', $path) as $segment) {
-            if ($segment === '' || $segment === '.' || $segment === '..') {
+            $plain = preg_match('/^[A-Za-z0-9._-]+$/D', $segment) === 1 && !str_ends_with($segment, '.');
+            if (!$plain || preg_match('/^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i', $segment) === 1) {
                 return false;
             }
         }

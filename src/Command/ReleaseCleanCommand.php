@@ -79,7 +79,7 @@ final class ReleaseCleanCommand extends Command
         }
 
         if ($remaining !== []) {
-            $io->warning([$cleaner->usesGit() ? 'Still here, because Git keeps modified and untracked files. Review them:' : 'These could not be removed. Check their permissions:', ...$remaining]);
+            $io->warning([$cleaner->usesGit() ? 'Still here, because Git keeps modified and untracked files. Review them:' : 'These could not be removed: check their permissions, or whether they lead outside the project:', ...$remaining]);
 
             return $cleaner->usesGit() ? self::SUCCESS : self::FAILURE;
         }

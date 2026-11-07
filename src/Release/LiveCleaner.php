@@ -78,11 +78,38 @@ final readonly class LiveCleaner
             $this->checkOutWithout($paths);
         } else {
             foreach ($this->present($paths) as $path) {
-                ReleaseBuilder::remove("{$this->project}/{$path}");
+                if ($this->isExactlyHere($path)) {
+                    ReleaseBuilder::remove("{$this->project}/{$path}");
+                }
             }
         }
 
         return $this->present($paths);
+    }
+
+    /**
+     * The last check before a deletion, on the disk rather than on the text:
+     * the folder holding the path is the one the path names, with no link on the
+     * way, and that folder lists exactly this name, which another spelling of a
+     * file (a short name, trailing dots) does not match. A path that fails stays,
+     * and is reported as still present.
+     */
+    private function isExactlyHere(string $path): bool
+    {
+        $project = realpath($this->project);
+        $parent = realpath(dirname("{$this->project}/{$path}"));
+        if ($project === false || $parent === false) {
+            return false;
+        }
+
+        $folder = dirname($path);
+        $expected = $folder === '.' ? $project : $project . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $folder);
+        $names = scandir($parent) ?: [];
+        if (PHP_OS_FAMILY === 'Windows') {
+            return strcasecmp($parent, $expected) === 0 && in_array(strtolower(basename($path)), array_map(strtolower(...), $names), true);
+        }
+
+        return $parent === $expected && in_array(basename($path), $names, true);
     }
 
     /**
