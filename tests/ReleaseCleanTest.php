@@ -11,6 +11,7 @@ use Symfony\Component\Console\Output\BufferedOutput;
 use Zana\Console\ConsoleKernel;
 use Zana\Console\ConsoleServiceProvider;
 use Zana\Console\Release\ExclusionRules;
+use Zana\Console\Release\LiveCleaner;
 use Zana\Console\Release\ReleaseBuilder;
 use Zana\Core\Application;
 
@@ -52,6 +53,7 @@ final class ReleaseCleanTest extends TestCase
             # project notes
             /docs export-ignore
             /src/Old/ export-ignore
+            /assets/raw/** export-ignore
             /README.md export-ignore
             /notes.txt text eol=lf
             *.log export-ignore
@@ -61,6 +63,7 @@ final class ReleaseCleanTest extends TestCase
 
         $this->assertContains('docs', $paths);
         $this->assertContains('src/Old', $paths);
+        $this->assertContains('assets/raw', $paths, 'for an export, /x/** is /x');
         $this->assertNotContains('notes.txt', $paths);
         $this->assertSame(1, array_count_values($paths)['README.md'], 'listed once');
         $this->assertSame(['*.log'], $unsupported);
@@ -73,6 +76,49 @@ final class ReleaseCleanTest extends TestCase
         ['paths' => $paths] = ExclusionRules::live(implode("\n", array_map(static fn (string $line): string => "{$line}export-ignore", $hostile)));
 
         $this->assertSame(array_values(array_diff(ExclusionRules::PATHS, ['.env'])), $paths);
+    }
+
+    public function testPatternsGitMatchesAtAnyDepthAreNamed(): void
+    {
+        $attributes = "docs export-ignore\nnotes/ export-ignore\n/anchored export-ignore\nsrc/deep export-ignore\n/tree/** export-ignore\n";
+
+        ['paths' => $paths, 'rootOnly' => $rootOnly] = ExclusionRules::live($attributes);
+
+        $this->assertSame(['docs', 'notes/'], $rootOnly);
+        $this->assertContains('docs', $paths);
+        $this->assertContains('notes', $paths);
+    }
+
+    public function testTheCommandNamesThoseAndTheUnsupportedOnes(): void
+    {
+        $this->folder();
+        file_put_contents("{$this->project()}/.gitattributes", "notes export-ignore\n*.log export-ignore\n");
+
+        [$code, $output] = $this->run_('production', ['--dry-run' => true]);
+
+        $this->assertSame(0, $code);
+        $this->assertStringContainsString('in any folder', (string) preg_replace('/\s+/', ' ', $output));
+        $this->assertStringContainsString('not applied', $output);
+        $this->assertStringContainsString('*.log', $output);
+    }
+
+    public function testGitMustBeRecentEnough(): void
+    {
+        $this->assertFalse(LiveCleaner::isRecentEnough('git version 2.34.1'));
+        $this->assertFalse(LiveCleaner::isRecentEnough('git version 1.8.3.1'));
+        $this->assertFalse(LiveCleaner::isRecentEnough('not git'));
+        $this->assertTrue(LiveCleaner::isRecentEnough('git version 2.35.0'));
+        $this->assertTrue(LiveCleaner::isRecentEnough('git version 2.51.2.windows.1'));
+        $this->assertTrue(LiveCleaner::isRecentEnough('git version 3.0.0'));
+    }
+
+    public function testThisGitIsAccepted(): void
+    {
+        $this->checkout();
+
+        (new LiveCleaner($this->project()))->assertGitIsRecentEnough();
+
+        $this->addToAssertionCount(1);
     }
 
     public function testOutsideProductionNothingChanges(): void
@@ -248,14 +294,55 @@ final class ReleaseCleanTest extends TestCase
     {
         mkdir("{$this->root}/kept");
         file_put_contents("{$this->root}/kept/file.txt", 'kept');
-        if (!@symlink("{$this->root}/kept", "{$this->root}/link")) {
-            $this->markTestSkipped('This system cannot create symbolic links.');
-        }
+        $this->link("{$this->root}/kept", "{$this->root}/link");
 
         ReleaseBuilder::remove("{$this->root}/link");
 
         $this->assertFileExists("{$this->root}/kept/file.txt");
-        $this->assertFalse(is_link("{$this->root}/link"));
+        $this->assertFalse(file_exists("{$this->root}/link"));
+    }
+
+    public function testALinkInsideARemovedFolderIsNotFollowed(): void
+    {
+        mkdir("{$this->root}/kept");
+        file_put_contents("{$this->root}/kept/file.txt", 'kept');
+        mkdir("{$this->root}/box");
+        file_put_contents("{$this->root}/box/file.txt", 'gone');
+        $this->link("{$this->root}/kept", "{$this->root}/box/link");
+
+        ReleaseBuilder::remove("{$this->root}/box");
+
+        $this->assertFileExists("{$this->root}/kept/file.txt");
+        $this->assertDirectoryDoesNotExist("{$this->root}/box");
+    }
+
+    public function testTheCommandDoesNotFollowALinkOutOfTheProject(): void
+    {
+        $this->folder();
+        mkdir("{$this->root}/outside");
+        file_put_contents("{$this->root}/outside/file.txt", 'not part of the project');
+        rename("{$this->project()}/tests", "{$this->root}/old-tests");
+        $this->link("{$this->root}/outside", "{$this->project()}/tests");
+        $this->link("{$this->root}/outside", "{$this->project()}/.github");
+
+        [$code, $output] = $this->run_('production', ['--force' => true]);
+
+        $this->assertSame(0, $code, $output);
+        $this->assertFileExists("{$this->root}/outside/file.txt");
+        $this->assertFalse(file_exists("{$this->project()}/tests"));
+    }
+
+    /** A junction on Windows, which needs no privilege; a symbolic link elsewhere. */
+    private function link(string $target, string $link): void
+    {
+        if (PHP_OS_FAMILY === 'Windows') {
+            $windows = static fn (string $path): string => str_replace('/', '\\', $path);
+            exec('mklink /J ' . escapeshellarg($windows($link)) . ' ' . escapeshellarg($windows($target)) . ' 2>&1', $out, $status);
+            $this->assertSame(0, $status, implode("\n", $out));
+
+            return;
+        }
+        $this->assertTrue(symlink($target, $link));
     }
 
     private function project(): string

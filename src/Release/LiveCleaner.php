@@ -14,6 +14,9 @@ namespace Zana\Console\Release;
  */
 final readonly class LiveCleaner
 {
+    /** The first Git whose sparse-checkout set takes --no-cone. */
+    public const string MINIMUM_GIT = '2.35';
+
     public function __construct(private string $project, private Process $process = new Process(120))
     {
     }
@@ -24,7 +27,30 @@ final readonly class LiveCleaner
     }
 
     /**
-     * @return array{paths: list<string>, unsupported: list<string>} See ExclusionRules::live()
+     * @throws ReleaseException When this Git cannot apply the rules
+     */
+    public function assertGitIsRecentEnough(): void
+    {
+        try {
+            $version = $this->process->run(['git', '--version'], $this->project);
+        } catch (ReleaseException) {
+            throw new ReleaseException('This is a Git checkout, but git cannot be run here. Nothing was changed.');
+        }
+        if (!self::isRecentEnough($version)) {
+            throw new ReleaseException(sprintf('release:clean needs Git %s or later in a checkout; this server has "%s". Nothing was changed.', self::MINIMUM_GIT, trim($version)));
+        }
+    }
+
+    /**
+     * @param string $version The output of git --version, e.g. "git version 2.51.2.windows.1"
+     */
+    public static function isRecentEnough(string $version): bool
+    {
+        return preg_match('/(\d+\.\d+(?:\.\d+)?)/', $version, $match) === 1 && version_compare($match[1], self::MINIMUM_GIT, '>=');
+    }
+
+    /**
+     * @return array{paths: list<string>, unsupported: list<string>, rootOnly: list<string>} See ExclusionRules::live()
      */
     public function rules(bool $includePublic = false): array
     {

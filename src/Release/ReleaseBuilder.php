@@ -115,23 +115,53 @@ final readonly class ReleaseBuilder
     }
 
     /**
-     * Deletes a file or a folder. Links are removed, not followed.
+     * Deletes a file or a folder, as far as it can: the caller checks what is
+     * left. Links are removed, not followed.
      */
     public static function remove(string $path): void
     {
-        if (is_link($path) || is_file($path)) {
-            unlink($path);
+        if (self::isLink($path) || !is_dir($path)) {
+            self::removeEntry($path);
 
             return;
         }
-        if (!file_exists($path)) {
-            return;
+        foreach (scandir($path) ?: [] as $name) {
+            if ($name !== '.' && $name !== '..') {
+                self::remove("{$path}/{$name}");
+            }
         }
-        $items = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
-        foreach ($items as $item) {
-            assert($item instanceof \SplFileInfo);
-            $item->isDir() && !$item->isLink() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+        @rmdir($path);
+    }
+
+    /**
+     * Asked of every entry before going into it. On Windows, is_link() is false
+     * for a junction, is_dir() can be true or false for the same one, and
+     * readlink() answers for plain folders too, so a recursive iterator or
+     * is_dir() alone can walk into a target and delete what is there. The real
+     * path tells: an entry that is not where its parent says is a link. When in
+     * doubt the answer is yes, which can only leave something behind.
+     */
+    private static function isLink(string $path): bool
+    {
+        clearstatcache(true, $path);
+        $real = realpath($path);
+        $parent = realpath(dirname($path));
+        if (is_link($path) || $real === false || $parent === false) {
+            return true;
         }
-        rmdir($path);
+        $expected = rtrim($parent, '/\\') . DIRECTORY_SEPARATOR . basename($path);
+
+        return PHP_OS_FAMILY === 'Windows' ? strcasecmp($real, $expected) !== 0 : $real !== $expected;
+    }
+
+    /**
+     * rmdir is what removes a junction, or a link to a folder, on Windows. It
+     * never empties anything, so a target is safe.
+     */
+    private static function removeEntry(string $path): void
+    {
+        if (!@unlink($path)) {
+            @rmdir($path);
+        }
     }
 }

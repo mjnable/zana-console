@@ -31,40 +31,46 @@ final class ExclusionRules
      * @param string|null $attributes The content of .gitattributes: its literal export-ignore paths count
      * @param bool $includePublic Add public/, for release:clean --no-public
      *
-     * @return array{paths: list<string>, unsupported: list<string>} The paths for a live server, and the export-ignore patterns that cannot be applied there
+     * @return array{paths: list<string>, unsupported: list<string>, rootOnly: list<string>} The paths for a live server, the export-ignore patterns
+     *                                                                                 that cannot be applied there, and those applied at the root only,
+     *                                                                                 which Git matches in any folder
      */
     public static function live(?string $attributes = null, bool $includePublic = false): array
     {
-        ['paths' => $ignored, 'unsupported' => $unsupported] = self::exportIgnored($attributes ?? '');
+        ['paths' => $ignored, 'unsupported' => $unsupported, 'rootOnly' => $rootOnly] = self::exportIgnored($attributes ?? '');
         $paths = array_filter([...self::PATHS, ...$ignored], static fn (string $path): bool => !self::isProtected($path));
         if ($includePublic) {
             $paths[] = self::PUBLIC;
         }
 
-        return ['paths' => array_values(array_unique($paths)), 'unsupported' => $unsupported];
+        return ['paths' => array_values(array_unique($paths)), 'unsupported' => $unsupported, 'rootOnly' => $rootOnly];
     }
 
     /**
-     * @return array{paths: list<string>, unsupported: list<string>}
+     * @return array{paths: list<string>, unsupported: list<string>, rootOnly: list<string>}
      */
     private static function exportIgnored(string $attributes): array
     {
         $paths = [];
         $unsupported = [];
+        $rootOnly = [];
         foreach (preg_split('/\R/', $attributes) ?: [] as $line) {
             $fields = preg_split('/\s+/', trim($line)) ?: [];
             if ($fields === [] || $fields[0] === '' || $fields[0][0] === '#' || !in_array('export-ignore', array_slice($fields, 1), true)) {
                 continue;
             }
-            $path = trim($fields[0], '/');
+            $path = trim((string) preg_replace('#/\*\*$#', '', $fields[0]), '/');   // /docs/** is /docs, for an export
             if (self::isLiteral($path)) {
                 $paths[] = $path;
+                if (!str_contains(rtrim($fields[0], '/'), '/')) {
+                    $rootOnly[] = $fields[0];   // no slash: Git matches it at any depth
+                }
             } else {
                 $unsupported[] = $fields[0];
             }
         }
 
-        return ['paths' => $paths, 'unsupported' => $unsupported];
+        return ['paths' => $paths, 'unsupported' => $unsupported, 'rootOnly' => $rootOnly];
     }
 
     /**

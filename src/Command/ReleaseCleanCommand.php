@@ -43,11 +43,17 @@ final class ReleaseCleanCommand extends Command
 
         $cleaner = new LiveCleaner($application->path());
         try {
-            ['paths' => $paths, 'unsupported' => $unsupported] = $cleaner->rules((bool) $input->getOption('no-public'));
+            if ($cleaner->usesGit()) {
+                $cleaner->assertGitIsRecentEnough();
+            }
+            ['paths' => $paths, 'unsupported' => $unsupported, 'rootOnly' => $rootOnly] = $cleaner->rules((bool) $input->getOption('no-public'));
             $present = $cleaner->present($paths);
 
             if ($unsupported !== []) {
                 $io->warning(['These export-ignore patterns are not applied here, because only plain paths are:', ...$unsupported]);
+            }
+            if ($rootOnly !== []) {
+                $io->warning(['These export-ignore patterns apply at the project root only here, while Git matches them in any folder. Use a full path, such as /src/docs, for a nested one:', ...$rootOnly]);
             }
             if ($present !== []) {
                 $io->writeln($dryRun ? 'Would remove:' : 'To remove:');
@@ -73,9 +79,9 @@ final class ReleaseCleanCommand extends Command
         }
 
         if ($remaining !== []) {
-            $io->warning(['Still here, because Git keeps modified and untracked files. Review them:', ...$remaining]);
+            $io->warning([$cleaner->usesGit() ? 'Still here, because Git keeps modified and untracked files. Review them:' : 'These could not be removed. Check their permissions:', ...$remaining]);
 
-            return self::SUCCESS;
+            return $cleaner->usesGit() ? self::SUCCESS : self::FAILURE;
         }
         $io->success($cleaner->usesGit() ? 'The checkout follows the exclusion rules, and git pull keeps working.' : 'The project follows the exclusion rules.');
 
