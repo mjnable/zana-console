@@ -123,8 +123,17 @@ final class ReleaseBuildTest extends TestCase
     #[RequiresPhpExtension('zip')]
     public function testProjectDocumentsStayInTheRepository(): void
     {
-        $documents = ['AGENTS.md', 'CLAUDE.md', 'README.md', '.env.example'];
-        $this->commitProject(array_fill_keys($documents, 'for people and agents') + ['src/Blog/README.md' => 'part of a module']);
+        $documents = [
+            'AGENTS.md', 'CLAUDE.md', 'README.md', 'CHANGELOG.md', 'LICENSE', 'CONTRIBUTING.md', '.env.example',
+            'config/testing/security.php', 'library.plan.json', 'phpstan.neon.dist', '.editorconfig',
+        ];
+        $this->commitProject(array_fill_keys($documents, 'not for the server') + [
+            'src/Blog/README.md' => 'part of a module',
+            'config/app.php' => '<?php return [];',
+            'config/testing.php' => '<?php return [];',
+            'src/Blog/feature.plan.json' => '{}',
+            '.htaccess' => 'Options -Indexes',
+        ]);
 
         $code = self::entries($this->build()['code']);
 
@@ -132,7 +141,51 @@ final class ReleaseBuildTest extends TestCase
             $this->assertNotContains("website/{$document}", $code);
             $this->assertFileExists("{$this->project}/{$document}");
         }
-        $this->assertContains('website/src/Blog/README.md', $code, 'only top-level names are left out');
+        $this->assertContains('website/src/Blog/README.md', $code, 'names match from the root only');
+        $this->assertContains('website/src/Blog/feature.plan.json', $code);
+        $this->assertContains('website/config/app.php', $code);
+        $this->assertContains('website/config/testing.php', $code, 'a path matches whole names');
+    }
+
+    #[RequiresPhpExtension('zip')]
+    public function testWhatMustStayOnTheServerStays(): void
+    {
+        $this->commitProject(['.htaccess' => 'Options -Indexes']);
+
+        $code = self::entries($this->build()['code']);
+
+        $this->assertContains('website/.htaccess', $code, 'it keeps .env private if the project lands in the document root');
+        $this->assertContains('website/composer.json', $code, 'Composer can run on the upload');
+    }
+
+    #[RequiresPhpExtension('zip')]
+    public function testDependenciesLoseTheirDocumentsAndKeepTheirLicences(): void
+    {
+        $library = [
+            'packages/lib/composer.json' => '{"name": "acme/lib", "version": "1.0.0", "autoload": {"psr-4": {"Acme\\\\Lib\\\\": "src/"}}}',
+            'packages/lib/src/Thing.php' => '<?php',
+            'packages/lib/src/README.md' => 'kept: not at the root of the package',
+            'packages/lib/LICENSE' => 'MIT',
+            'packages/lib/LICENSE.md' => 'MIT',
+        ];
+        foreach (['README.md', 'readme.md', 'CHANGELOG.md', 'ChangeLog-11.5.md', 'SECURITY.md', 'UPGRADE.md', 'docs/guide.md', '.github/ci.yml', '.gitignore'] as $name) {
+            $library["packages/lib/{$name}"] = 'for readers';
+        }
+        $this->commitProject($library + [
+            'composer.json' => '{"name": "acme/site", "require": {"acme/lib": "*"}, "repositories": [{"packagist.org": false}, {"type": "path", "url": "packages/lib", "options": {"symlink": false}}]}',
+        ]);
+
+        $code = self::entries($this->build()['code']);
+
+        $this->assertContains('website/vendor/acme/lib/src/Thing.php', $code);
+        $this->assertContains('website/vendor/acme/lib/src/README.md', $code);
+        $this->assertContains('website/vendor/acme/lib/composer.json', $code);
+        $this->assertContains('website/vendor/acme/lib/LICENSE', $code, 'licences must travel with the code');
+        $this->assertContains('website/vendor/acme/lib/LICENSE.md', $code);
+        $this->assertSame(
+            [],
+            preg_grep('#^website/vendor/acme/lib/(?i:readme|changelog|security|upgrade|docs|\.github|\.gitignore)#', $code),
+        );
     }
 
     #[RequiresPhpExtension('zip')]

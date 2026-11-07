@@ -12,8 +12,10 @@ not change this package is not listed.
 
 ### Changed
 
-- `release:build` leaves `AGENTS.md`, `CLAUDE.md`, `README.md` and `.env.example` out of the code archive
-  (FE-65).
+- `release:build` leaves out of the code archive what does not run (FE-65): the project's documents
+  (`README.md`, `CHANGELOG.md`, `LICENSE`, `AGENTS.md`, `CLAUDE.md` and the like), `.env.example`,
+  `config/testing/`, `*.plan.json`, PHPStan's files, and the documents at the root of each package in
+  `vendor/`. Licence files in `vendor/`, `composer.json`, `composer.lock` and the root `.htaccess` stay.
 
 ## 2.11.0 — 2026-11-01
 
