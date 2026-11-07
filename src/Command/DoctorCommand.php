@@ -22,7 +22,9 @@ use Zana\Core\Inspection\Severity;
  * directory, the length of security.secret, every deployment check the
  * application runs at startup, and that every singleton can be created: a
  * factory that resolves a scoped service, which the build cannot see, fails
- * here rather than in traffic (FE-40). Exits with 1 when something is fatal.
+ * here rather than in traffic (FE-40). In production, it warns about files
+ * that do not belong on a live server (FE-66). Exits with 1 when something is
+ * fatal.
  *
  * --format=json writes the same report as the check command (ADR-023).
  */
@@ -73,6 +75,7 @@ final class DoctorCommand extends Command
 
         Diagnostics::deploymentChecks($application, $report);
         Diagnostics::singletons($application, $report);
+        Diagnostics::excludedFiles($application, $report);
 
         return $report->render($output, $io, $format, 'This server is ready.', 'This server is not ready.');
     }

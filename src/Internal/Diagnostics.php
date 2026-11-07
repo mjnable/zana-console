@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Zana\Console\Internal;
 
+use Zana\Console\Release\ExclusionRules;
 use Zana\Core\Application;
 use Zana\Core\ApplicationInterface;
 use Zana\Core\Deployment\CheckStatus;
@@ -36,6 +37,33 @@ final class Diagnostics
                 $report->add(new Finding('deployment.' . $name, $result->status === CheckStatus::Fatal ? Severity::Error : Severity::Warning, $message));
             }
         }
+    }
+
+    /**
+     * In production, name the files the release rules keep off a live server,
+     * however they arrived (FE-66). This reads the disk only: doctor does not
+     * run git.
+     */
+    public static function excludedFiles(ApplicationInterface $application, Report $report): void
+    {
+        if (!$application->environment()->isProduction()) {
+            return;
+        }
+
+        $attributes = is_file($application->path('.gitattributes')) ? file_get_contents($application->path('.gitattributes')) : false;
+        $paths = ExclusionRules::live($attributes === false ? null : $attributes)['paths'];
+        $present = array_values(array_filter($paths, static fn (string $path): bool => file_exists($application->path($path))));
+        if ($present === []) {
+            $report->pass('Only what runs is on this server');
+
+            return;
+        }
+        $report->add(new Finding(
+            'release.files',
+            Severity::Warning,
+            'These files do not belong on a live server: ' . implode(', ', $present) . '.',
+            hint: 'See what would go: php bin/console release:clean --dry-run',
+        ));
     }
 
     /**

@@ -21,12 +21,6 @@ namespace Zana\Console\Release;
  */
 final readonly class ReleaseBuilder
 {
-    /** Top-level paths of the project that never ship. */
-    private const array EXCLUDED = [
-        'tests', '.github', 'phpunit.xml.dist', 'phpunit.xml', '.gitattributes', '.gitignore', '.env', '.env.testing',
-        'AGENTS.md', 'CLAUDE.md', 'README.md', '.env.example',
-    ];
-
     /**
      * @param list<string> $composer The command that runs Composer (see ComposerLocator)
      */
@@ -79,7 +73,7 @@ final readonly class ReleaseBuilder
                 throw new ReleaseException("The folder {$output} cannot be created.");
             }
             $archives = ['code' => "{$output}/{$folder}.zip", 'public' => "{$output}/public_html.zip"];
-            self::zip($archives['code'], $source, "{$folder}/", $includePublic ? self::EXCLUDED : [...self::EXCLUDED, 'public'], ["{$folder}/var/"]);
+            self::zip($archives['code'], $source, "{$folder}/", $includePublic ? ExclusionRules::PATHS : [...ExclusionRules::PATHS, 'public'], ["{$folder}/var/"]);
             self::zip($archives['public'], "{$source}/public", '', [], []);
 
             return $archives;
@@ -120,8 +114,16 @@ final readonly class ReleaseBuilder
         $zip->close();
     }
 
-    private static function remove(string $path): void
+    /**
+     * Deletes a file or a folder. Links are removed, not followed.
+     */
+    public static function remove(string $path): void
     {
+        if (is_link($path) || is_file($path)) {
+            unlink($path);
+
+            return;
+        }
         if (!file_exists($path)) {
             return;
         }
