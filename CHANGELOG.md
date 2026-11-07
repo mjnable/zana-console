@@ -8,7 +8,8 @@ not change this package is not listed.
 ### Added
 
 - `release:clean` applies the release exclusion rules on a live server: sparse-checkout in a Git checkout,
-  deletion elsewhere. It runs only in production; `--dry-run` works anywhere (FE-66).
+  deletion elsewhere. It runs only in production; `--dry-run` works anywhere. A checkout needs Git 2.35
+  (FE-66).
 - `doctor` warns in production when files the rules exclude are on the server (`release.files`).
 - `Release\ExclusionRules`, the one list of those rules.
 
