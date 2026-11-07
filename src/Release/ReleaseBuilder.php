@@ -16,31 +16,16 @@ namespace Zana\Console\Release;
  *
  * The archives come from a commit (git archive), so uncommitted files,
  * .env and var/ never ship, and export-ignore in the project's
- * .gitattributes leaves a path out of both. The code archive holds what
- * runs: tests, development tooling, the testing configuration, and the
- * documents of the project and of its dependencies are left out.
- *
- * Three things that do not run stay on purpose: the dependencies' licence
- * files, which must travel with them; composer.json and composer.lock, for
- * running Composer on the upload; and the root .htaccess, which keeps .env
- * private if the project lands inside the document root by mistake.
+ * .gitattributes leaves a path out of both. Tests, development tooling and
+ * the project's documents are left out.
  */
 final readonly class ReleaseBuilder
 {
-    /** Paths from the project's root, files or folders, that never ship. */
+    /** Top-level paths of the project that never ship. */
     private const array EXCLUDED = [
-        'tests', 'config/testing', '.env', '.env.testing', '.env.example',
-        '.github', '.gitattributes', '.gitignore', '.editorconfig',
-        'phpunit.xml', 'phpunit.xml.dist', '.phpunit.cache', '.phpunit.result.cache', 'phpstan.neon', 'phpstan.neon.dist',
-        'AGENTS.md', 'CLAUDE.md', 'README.md', 'CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md', 'UPGRADE.md',
-        'LICENSE', 'LICENSE.md', 'LICENSE.txt',
+        'tests', '.github', 'phpunit.xml.dist', 'phpunit.xml', '.gitattributes', '.gitignore', '.env', '.env.testing',
+        'AGENTS.md', 'CLAUDE.md', 'README.md', '.env.example',
     ];
-
-    /** Input of make:plan, at the project's root. */
-    private const string PLAN = '#^[^/]+\.plan\.json$#';
-
-    /** What a dependency carries at its root for its readers, not for PHP. Licence files are not in it. */
-    private const string DEPENDENCY_DOCUMENTS = '#^vendor/[^/]+/[^/]+/(?:(?:readme|changelog|contributing|security|upgrade|deprecations)[^/]*\.md|docs|\.github|\.gitignore|\.editorconfig|\.psalm)(?:/|$)#i';
 
     /**
      * @param list<string> $composer The command that runs Composer (see ComposerLocator)
@@ -94,8 +79,8 @@ final readonly class ReleaseBuilder
                 throw new ReleaseException("The folder {$output} cannot be created.");
             }
             $archives = ['code' => "{$output}/{$folder}.zip", 'public' => "{$output}/public_html.zip"];
-            self::zip($archives['code'], $source, "{$folder}/", static fn (string $path): bool => self::leftOut($path, $includePublic), ["{$folder}/var/"]);
-            self::zip($archives['public'], "{$source}/public", '', static fn (): bool => false, []);
+            self::zip($archives['code'], $source, "{$folder}/", $includePublic ? self::EXCLUDED : [...self::EXCLUDED, 'public'], ["{$folder}/var/"]);
+            self::zip($archives['public'], "{$source}/public", '', [], []);
 
             return $archives;
         } finally {
@@ -103,22 +88,11 @@ final readonly class ReleaseBuilder
         }
     }
 
-    private static function leftOut(string $path, bool $includePublic): bool
-    {
-        foreach ($includePublic ? self::EXCLUDED : [...self::EXCLUDED, 'public'] as $excluded) {
-            if ($path === $excluded || str_starts_with($path, "{$excluded}/")) {
-                return true;
-            }
-        }
-
-        return preg_match(self::PLAN, $path) === 1 || preg_match(self::DEPENDENCY_DOCUMENTS, $path) === 1;
-    }
-
     /**
-     * @param \Closure(string): bool $leftOut Whether a path, relative to $directory, stays out
+     * @param list<string> $excluded Top-level names to leave out
      * @param list<string> $emptyDirectories
      */
-    private static function zip(string $file, string $directory, string $prefix, \Closure $leftOut, array $emptyDirectories): void
+    private static function zip(string $file, string $directory, string $prefix, array $excluded, array $emptyDirectories): void
     {
         if (is_file($file)) {
             unlink($file);
@@ -135,7 +109,7 @@ final readonly class ReleaseBuilder
                 continue;
             }
             $relative = str_replace('\\', '/', substr($path->getPathname(), strlen($directory) + 1));
-            if ($leftOut($relative)) {
+            if (in_array(explode('/', $relative)[0], $excluded, true)) {
                 continue;
             }
             $zip->addFile($path->getPathname(), $prefix . $relative);
