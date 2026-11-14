@@ -37,7 +37,7 @@ final class DeploymentCommandsTest extends TestCase
         $kernel = $this->kernel();
         $file = "{$this->base}/var/container.php";
         $config = "{$this->base}/var/config.php";
-        unlink($file);
+        $this->assertFileDoesNotExist($file, 'a development build writes no container cache (FE-70); cache:warm does');
 
         [$code, $output] = $this->execute($kernel, 'cache:warm');
         $this->assertSame(0, $code);
