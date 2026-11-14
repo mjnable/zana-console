@@ -15,6 +15,10 @@ use Zana\Console\Release\Process;
 use Zana\Console\Release\ReleaseBuilder;
 use Zana\Console\Release\ReleaseException;
 use Zana\Core\ApplicationInterface;
+use Zana\Core\Inspection\ApplicationCheck;
+use Zana\Core\Inspection\Finding;
+use Zana\Core\Inspection\SecurityRules;
+use Zana\Core\Inspection\Severity;
 
 /**
  * php bin/console release:build [--folder=website] [--ref=HEAD] [--no-public] [-v]
@@ -22,6 +26,9 @@ use Zana\Core\ApplicationInterface;
  * Writes build/<folder>.zip and build/public_html.zip from a commit, with the
  * production dependencies installed, for shared hosting without Composer
  * (ADR-021). See ReleaseBuilder.
+ *
+ * With security.strict (2.21, FE-68), it refuses to build while a security
+ * rule of `check` reports an error.
  */
 #[AsCommand(name: 'release:build', description: 'Build the upload archives for shared hosting from a commit')]
 final class ReleaseBuildCommand extends Command
@@ -39,6 +46,10 @@ final class ReleaseBuildCommand extends Command
 
     public function handle(InputInterface $input, OutputInterface $output, SymfonyStyle $io, ApplicationInterface $application): int
     {
+        if (!self::passesSecurityRules($application, $io)) {
+            return self::FAILURE;
+        }
+
         $folder = (string) $input->getOption('folder');
         $target = (string) $input->getOption('output');
         $target = preg_match('#^([A-Za-z]:)?[/\\\\]#', $target) === 1 ? $target : $application->path($target);
@@ -68,5 +79,42 @@ final class ReleaseBuildCommand extends Command
         ]);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The gate (2.21, FE-68, ADR-033): the security rules of `check` run
+     * first. With security.strict, an error among them stops the build;
+     * without it, they are printed and the build goes on, as before 2.21.
+     */
+    private static function passesSecurityRules(ApplicationInterface $application, SymfonyStyle $io): bool
+    {
+        $strict = SecurityRules::strict($application);
+        try {
+            $checks = $application->container()->tagged(ApplicationCheck::TAG);
+            $findings = [];
+            foreach ($checks as $check) {
+                if ($check instanceof ApplicationCheck) {
+                    array_push($findings, ...array_filter($check->findings($application), static fn (Finding $f): bool => $f->security));
+                }
+            }
+        } catch (\Throwable $e) {
+            $message = 'The security rules could not run: ' . strtok($e->getMessage(), "\n");
+            $strict ? $io->error([$message, 'Nothing was built. Run php bin/console check to see why.']) : $io->warning($message);
+
+            return !$strict;
+        }
+
+        $errors = array_values(array_filter($findings, static fn (Finding $f): bool => $f->severity === Severity::Error));
+        $lines = array_map(static fn (Finding $f): string => "[{$f->id}] {$f->message}" . ($f->file === null ? '' : " ({$f->file})"), $findings);
+        if ($errors !== []) {
+            $io->error(['Nothing was built: the security rules of check report ' . count($errors) . ' error(s) (security.strict).', ...$lines]);
+
+            return false;
+        }
+        if ($lines !== []) {
+            $io->warning(['The security rules of check report these; with security.strict they would stop the build:', ...$lines]);
+        }
+
+        return true;
     }
 }

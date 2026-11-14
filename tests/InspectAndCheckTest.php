@@ -103,7 +103,7 @@ final class InspectAndCheckTest extends TestCase
 
         $this->assertSame(0, $code, 'a warning does not fail the check');
         $this->assertSame('warning', $json['status']);
-        $this->assertSame([['id' => 'stock.low', 'severity' => 'warning', 'message' => 'Stock is low.', 'file' => null, 'line' => null, 'hint' => 'Order more.']], $json['findings']);
+        $this->assertSame([['id' => 'stock.low', 'severity' => 'warning', 'message' => 'Stock is low.', 'file' => null, 'line' => null, 'hint' => 'Order more.', 'security' => false]], $json['findings']);
     }
 
     public function testCheckReportsAContainerThatCannotBeBuilt(): void

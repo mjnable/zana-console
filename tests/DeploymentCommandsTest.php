@@ -15,6 +15,10 @@ use Zana\Core\Application;
 use Zana\Core\ApplicationInterface;
 use Zana\Core\Cache\CacheClearerInterface;
 use Zana\Core\Cache\CacheWarmerInterface;
+use Zana\Core\Inspection\ApplicationCheck;
+use Zana\Core\Inspection\Finding;
+use Zana\Core\Inspection\SecurityRules;
+use Zana\Core\Inspection\Severity;
 
 final class DeploymentCommandsTest extends TestCase
 {
@@ -109,6 +113,33 @@ final class DeploymentCommandsTest extends TestCase
         $this->assertStringContainsString('This server is ready.', $output);
     }
 
+    public function testInStrictModeReleaseBuildRefusesWhileASecurityRuleFails(): void
+    {
+        // 2.21, FE-68: the gate. Nothing is built, before git or Composer runs.
+        $services = static fn (ServiceCollectionInterface $s) => $s->singleton(OpenRouteCheck::class)->tag(ApplicationCheck::TAG, OpenRouteCheck::class);
+
+        [$code, $output] = $this->execute($this->kernel(['security.strict' => true], $services), 'release:build');
+
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('Nothing was built: the security rules of check report 1 error(s)', $output);
+        $this->assertStringContainsString('[security.route_access] GET /admin does not say who may reach it.', $output);
+        $this->assertDirectoryDoesNotExist("{$this->base}/build");
+    }
+
+    public function testWithoutStrictModeReleaseBuildPrintsTheSecurityRulesAndGoesOn(): void
+    {
+        $services = static fn (ServiceCollectionInterface $s) => $s
+            ->singleton(OpenRouteCheck::class)->tag(ApplicationCheck::TAG, OpenRouteCheck::class)
+            ->singleton(OtherErrorCheck::class)->tag(ApplicationCheck::TAG, OtherErrorCheck::class);
+
+        [, $output] = $this->execute($this->kernel([], $services), 'release:build');   // fails later: this folder is no git repository
+
+        $this->assertStringContainsString('with security.strict they would stop the build', $output);
+        $this->assertStringContainsString('[security.route_access]', $output);
+        $this->assertStringNotContainsString('Nothing was built', $output);
+        $this->assertStringNotContainsString('shop.hours', $output, 'only security rules are the gate');
+    }
+
     /**
      * @param array<string, mixed> $config
      */
@@ -143,6 +174,22 @@ final class DeploymentCommandsTest extends TestCase
         $code = $kernel->run(new ArrayInput(['command' => $command]), $output);
 
         return [$code, $output->fetch()];
+    }
+}
+
+final class OpenRouteCheck implements ApplicationCheck
+{
+    public function findings(ApplicationInterface $application): array
+    {
+        return [new Finding('security.route_access', SecurityRules::severity($application), 'GET /admin does not say who may reach it.', security: true)];
+    }
+}
+
+final class OtherErrorCheck implements ApplicationCheck
+{
+    public function findings(ApplicationInterface $application): array
+    {
+        return [new Finding('shop.hours', Severity::Error, 'The opening hours are not set.')];
     }
 }
 

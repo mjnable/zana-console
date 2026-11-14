@@ -12,7 +12,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.5",
-        "mj-zana/core": "^2.11",
+        "mj-zana/core": "^2.21",
         "symfony/console": "^7.4 || ^8.0"
     },
     "suggest": {
@@ -96,7 +96,7 @@
             "options": {
                 "symlink": true,
                 "versions": {
-                    "mj-zana/core": "2.11.0"
+                    "mj-zana/core": "2.21.0"
                 }
             }
         },

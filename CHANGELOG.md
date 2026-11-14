@@ -3,6 +3,16 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.21.0 — Unreleased
+
+### Security
+
+- `release:build` runs the security rules of `check` first (FE-68, ADR-033). With `security.strict: true`, an error
+  among them stops it before git or Composer runs, and lists the findings. Without strict, they are printed and the
+  build goes on, as before. Other findings of `check` do not stop the build.
+- The JSON of `check` gives each finding a `security` field.
+- Requires mj-zana/core 2.21.
+
 ## 2.19.0 — 2026-11-07
 
 ### Added
