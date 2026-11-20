@@ -8,6 +8,11 @@
          failOnWarning="true"
          failOnDeprecation="true"
          failOnNotice="true">
+    <php>
+        <!-- The console wraps its messages at the terminal's width, which differs between machines and CI:
+             one fixed width, so the tests read the same output everywhere. -->
+        <env name="COLUMNS" value="200" force="true"/>
+    </php>
     <testsuites>
         <testsuite name="default">
             <directory>tests</directory>
