@@ -3,6 +3,16 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.30.0 — Unreleased
+
+### Added
+
+- `check` reads `architecture.shared_kernel` (FE-76, ADR-034) and applies the shared kernel's rules: every layer may use
+  it, and it may use only plain PHP, `Zana\Ddd` and the other kernels. A setting that names something other than a
+  module's Contracts is an error (`architecture.shared_kernel`), a kernel whose module has no Contracts directory a
+  warning, and the passing line names the kernel. A Domain or Contracts class that uses another module's Contracts
+  gets a hint about the kernel; a kernel class that uses a module or a service, one about moving it to Infrastructure.
+
 ## 2.21.0 — 2026-11-14
 
 ### Security

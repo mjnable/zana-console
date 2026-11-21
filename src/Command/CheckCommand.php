@@ -79,10 +79,25 @@ final class CheckCommand extends Command
             return;
         }
 
-        $rules = ModuleRules::for($modules);
+        // 2.30, ADR-034: the shared kernel that architecture.shared_kernel declares, read as the application's test reads it.
+        try {
+            // mj-zana/testing is optional, so an application may pair this console with a testing before 2.30.
+            // @phpstan-ignore function.alreadyNarrowedType
+            $rules = method_exists(ModuleRules::class, 'forApplication') ? ModuleRules::forApplication($application) : ModuleRules::for($modules);
+        } catch (\InvalidArgumentException $e) {
+            $report->add(new Finding('architecture.shared_kernel', Severity::Error, $e->getMessage(), hint: 'List modules\' Contracts namespaces in architecture.shared_kernel, such as Modules\Shared\Contracts.'));
+            $rules = ModuleRules::for($modules);
+        }
+        // @phpstan-ignore function.alreadyNarrowedType
+        $kernel = method_exists($rules, 'kernel') ? $rules->kernel() : [];
+        // @phpstan-ignore function.alreadyNarrowedType
+        foreach (method_exists($rules, 'emptyKernel') ? $rules->emptyKernel() : [] as $empty) {
+            $report->add(new Finding('architecture.shared_kernel', Severity::Warning, "The shared kernel {$empty} has no directory, so it shares nothing.", hint: 'Check the module\'s name, or create its Contracts directory.'));
+        }
+
         $violations = $rules->check();
         if ($violations === []) {
-            $report->pass('Architecture: ' . count($rules->modules()) . ' module(s), no violation');
+            $report->pass('Architecture: ' . count($rules->modules()) . ' module(s)' . ($kernel === [] ? '' : ', shared kernel ' . implode(', ', $kernel)) . ', no violation');
 
             return;
         }
@@ -93,7 +108,7 @@ final class CheckCommand extends Command
                 "{$violation->namespace} depends on {$violation->dependency} ({$violation->rule}).",
                 $violation->file,
                 $violation->line,
-                self::hint($violation->namespace, $violation->dependency),
+                self::hint($violation->namespace, $violation->dependency, $kernel),
             ));
         }
     }
@@ -101,11 +116,21 @@ final class CheckCommand extends Command
     /**
      * How to fix a dependency that breaks the module rules.
      */
-    private static function hint(string $namespace, string $dependency): string
+    /**
+     * @param list<string> $kernel The shared kernel's namespaces
+     */
+    private static function hint(string $namespace, string $dependency, array $kernel = []): string
     {
         $from = explode('\\', $namespace);
         $to = explode('\\', $dependency);
         $otherModule = $to[0] === $from[0] && isset($from[1], $to[1]) && $from[1] !== $to[1] ? $to[1] : null;
+        $inKernel = array_filter($kernel, static fn (string $k): bool => $namespace === $k || str_starts_with($namespace, $k . '\\')) !== [];
+        if ($inKernel) {
+            return 'The shared kernel holds values: it depends only on plain PHP, Zana\Ddd and the other kernels, never on a module or a service. Move this to its module\'s Infrastructure.';
+        }
+        if ($otherModule !== null && ($to[2] ?? '') === 'Contracts' && in_array($from[2] ?? '', ['Domain', 'Contracts'], true)) {
+            return "{$from[2]} may not use another module's Contracts. If {$otherModule}'s values belong to every module, such as money or a clock, declare its Contracts as the shared kernel (architecture.shared_kernel); otherwise use them from Application.";
+        }
         if ($otherModule !== null) {
             return "Depend on the {$otherModule} module's Contracts instead of its internals, and declare the module in dependsOn().";
         }

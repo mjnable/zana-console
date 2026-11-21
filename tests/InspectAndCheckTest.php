@@ -97,6 +97,35 @@ final class InspectAndCheckTest extends TestCase
         $this->assertStringStartsWith('Domain code depends only on itself and Zana\\Ddd', (string) $finding['hint']);
     }
 
+    /**
+     * 2.30, ADR-034: architecture.shared_kernel, read by check as by ModuleRules::forApplication().
+     */
+    public function testCheckReadsTheSharedKernel(): void
+    {
+        mkdir("{$this->base}/modules/Shop/Domain", 0777, true);
+        mkdir("{$this->base}/modules/Shared/Contracts", 0777, true);
+        mkdir("{$this->base}/modules/Empty/Domain", 0777, true);
+        file_put_contents("{$this->base}/modules/Shop/Domain/Order.php", "<?php\n\nnamespace Modules\\Shop\\Domain;\n\nuse Modules\\Shared\\Contracts\\Money;\n\nfinal class Order\n{\n    public function __construct(public Money \$total) {}\n}\n");
+        file_put_contents("{$this->base}/modules/Shared/Contracts/Money.php", "<?php\n\nnamespace Modules\\Shared\\Contracts;\n\nfinal class Money {}\n");
+        $findings = static fn (array $json, string $id): array => array_values(array_filter($json['findings'], static fn (array $f): bool => $f['id'] === $id));
+
+        // Without it, as before: the Domain may not use the Shared module's Contracts, and the hint names the kernel.
+        [$code, $json] = $this->json(['command' => 'check', '--format' => 'json']);
+        $this->assertSame(1, $code);
+        $this->assertStringContainsString('declare its Contracts as the shared kernel (architecture.shared_kernel)', (string) ($findings($json, 'architecture.dependency')[0]['hint'] ?? ''));
+
+        [$code, $json] = $this->json(['command' => 'check', '--format' => 'json'], ['architecture' => ['shared_kernel' => ['Modules\\Shared\\Contracts']]]);
+        $this->assertSame(0, $code, (string) json_encode($json));
+        $this->assertContains('Architecture: 3 module(s), shared kernel Modules\\Shared\\Contracts, no violation', $json['passed']);
+
+        [$code, $json] = $this->json(['command' => 'check', '--format' => 'json'], ['architecture' => ['shared_kernel' => ['Modules\\Shop\\Domain']]]);
+        $this->assertSame(1, $code, 'a module\'s internals are no kernel');
+        $this->assertStringContainsString('must be a module\'s Contracts', (string) ($findings($json, 'architecture.shared_kernel')[0]['message'] ?? ''));
+
+        [, $json] = $this->json(['command' => 'check', '--format' => 'json'], ['architecture' => ['shared_kernel' => ['Modules\\Shared\\Contracts', 'Modules\\Empty\\Contracts']]]);
+        $this->assertSame([['warning', 'The shared kernel Modules\\Empty\\Contracts has no directory, so it shares nothing.']], array_map(static fn (array $f): array => [$f['severity'], $f['message']], $findings($json, 'architecture.shared_kernel')));
+    }
+
     public function testApplicationChecksAddTheirFindings(): void
     {
         [$code, $json] = $this->json(['command' => 'check', '--format' => 'json'], ['stock.low' => true]);
