@@ -152,6 +152,28 @@ final class InspectAndCheckTest extends TestCase
         ConsoleKernel::runBuilder($builder, new ArrayInput(['command' => 'about']), new BufferedOutput());
     }
 
+    public function testCheckWarnsWhenTheCompiledCachesAreNotSigned(): void
+    {
+        $run = function (array $config): array {
+            $output = new BufferedOutput();
+            ConsoleKernel::runBuilder($this->builder($config)->withContainerCache($this->base . '/var/cache/container.php'), new ArrayInput(['command' => 'check', '--format' => 'json']), $output);
+            $json = json_decode($output->fetch(), true);
+            $this->assertIsArray($json);
+
+            return $json;
+        };
+
+        $unsigned = $run(['security.secret' => null]);
+        $this->assertContains('core.compiled_signing', array_column($unsigned['findings'], 'id'));
+
+        $signed = $run(['security.secret' => 'very-secret-value-0123456789abcdef']);
+        $this->assertNotContains('core.compiled_signing', array_column($signed['findings'], 'id'));
+        $this->assertContains('The compiled container and the configuration cache are signed', $signed['passed']);
+
+        $none = $this->json(['command' => 'check', '--format' => 'json'])[1];
+        $this->assertNotContains('core.compiled_signing', array_column($none['findings'], 'id'), 'no cache, nothing to sign');
+    }
+
     public function testDoctorSpeaksJsonToo(): void
     {
         [, $json] = $this->json(['command' => 'doctor', '--format' => 'json'], ['security.secret' => 'short']);

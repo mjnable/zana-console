@@ -46,6 +46,7 @@ final class CheckCommand extends Command
 
         $report->pass('The container builds');
         Diagnostics::deploymentChecks($application, $report);
+        Diagnostics::compiledCaches($application, $report);
         Diagnostics::singletons($application, $report);
         self::architecture($application, $report);
 

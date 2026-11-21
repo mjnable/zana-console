@@ -40,6 +40,33 @@ final class Diagnostics
     }
 
     /**
+     * core.compiled_signing (2.35): the compiled container and the
+     * configuration cache are PHP files the application includes. A warning
+     * when they are not signed, as they still work: code written to var/cache
+     * by anything but the application would then run.
+     */
+    public static function compiledCaches(ApplicationInterface $application, Report $report): void
+    {
+        // mj-zana/core before 2.35 does not sign them
+        // @phpstan-ignore function.alreadyNarrowedType
+        if (!$application instanceof Application || !method_exists($application, 'compiledCachesSigned')) {
+            return;
+        }
+        if ($application->containerCache() === null && $application->configurationCache() === null) {
+            return;
+        }
+
+        $application->compiledCachesSigned()
+            ? $report->pass('The compiled container and the configuration cache are signed')
+            : $report->add(new Finding(
+                'core.compiled_signing',
+                Severity::Warning,
+                'The compiled container and the configuration cache are not signed, so code written to their directory by anything but the application runs.',
+                hint: 'Set security.secret in .env (APP_SECURITY__SECRET), not in a configuration file: the configuration cache cannot hold the key that checks it.',
+            ));
+    }
+
+    /**
      * In production, name the files the release rules keep off a live server,
      * however they arrived (FE-66). This reads the disk only: doctor does not
      * run git.

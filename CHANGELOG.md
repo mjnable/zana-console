@@ -3,6 +3,13 @@
 All Zana packages share one version number and are released together. A release that did
 not change this package is not listed.
 
+## 2.35.0 — Unreleased
+
+### Security
+
+- `check` warns (`core.compiled_signing`) when the compiled container and the configuration cache are not signed: set
+  `security.secret` in `.env`. Needs mj-zana/core 2.35; with an earlier core, nothing is reported.
+
 ## 2.30.0 — 2026-11-21
 
 ### Added
